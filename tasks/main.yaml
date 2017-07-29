@@ -52,7 +52,7 @@
     enable: yes
 
 - name: Copy Elasticsearch configuration file
-  copy:
+  template:
     src: etc/elasticsearch/
     dest: /etc/elasticsearch/
     owner: root
@@ -66,7 +66,7 @@
     enable: yes
 
 - name: Copy Graylog configuration file
-  copy:
+  template:
     src: etc/graylog/server/
     dest: /etc/graylog/server/
     owner: root
