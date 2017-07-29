@@ -1,0 +1,81 @@
+#
+# Authors: Krix Apolinario <krixapolinario@gmail.com>
+#
+# Description: Simples Ansible Playbook to install a Graylog Server 2.3
+#
+
+---
+
+- name: Check OS version and family
+  fail:
+      msg: This playbook is only functional on CentOS 7 distribution
+  when:
+    - ansible_distribution == 'CentOS'
+    - ansible_distribution_major_version | version_compare('7', '!=')
+
+- name: Copy repository files to yum.repos.d
+  copy:
+    src: etc/yum.repos.d/
+    dest: /etc/yum.repos.d/
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Install the Elastic GPG key
+  rpm_key:
+    state: present
+    key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+
+- name: Copy Graylog repository file
+  copy:
+    src: tmp/
+    dest: /tmp/
+
+- name: Install Graylog repository file
+  yum:
+    name: /tmp/graylog-2.3-repository_latest.rpm
+    state: present
+
+- name: Install needed packages
+  yum: name={{ item }} state=latest
+  with_items:
+    - epel-release
+    - pwgen
+    - mongodb-org
+    - elasticsearch
+    - graylog-server
+
+- name: Start and enable MongoDB service
+  service:
+    name: mongod
+    state: started
+    enable: yes
+
+- name: Copy Elasticsearch configuration file
+  copy:
+    src: etc/elasticsearch/
+    dest: /etc/elasticsearch/
+    owner: root
+    group: elasticsearch
+    mode: 0644
+
+- name: Start and enable Elasticsearch service
+  service:
+    name: elasticsearch
+    state: started
+    enable: yes
+
+- name: Copy Graylog configuration file
+  copy:
+    src: etc/graylog/server/
+    dest: /etc/graylog/server/
+    owner: root
+    group: root
+    mode: 0750
+
+- name: Start and enable Graylog service
+  service:
+    name: graylog-server
+    state: started
+    enable: yes
+

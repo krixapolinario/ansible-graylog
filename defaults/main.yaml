@@ -1,0 +1,14 @@
+--
+# ELASTICSEARCH CONFIG:
+
+cluster_name: graylog
+
+# GRAYLOG CONFIG
+
+# You need to use the following command to create your root_password_sha2: 
+# echo -n yourpassword | sha256sum
+
+root_password_sha2: 1ee059d3a8704d9e60952d09bfa8c85bbabe986ca3c439b137fafb004bf4844a
+password_secret: 1ee059d3a8704d9e60952d09bfa8c85bbabe986ca3c439b137fafb004bf4844a
+root_email: youremail@dominio
+server_ip: 127.0.0.1
