@@ -1,68 +1,46 @@
-#fork from Graylog2 Official
+FROM php:5.6-apache
 
-FROM openjdk:8-jre
-MAINTAINER Graylog, Inc. <hello@graylog.com>
+# install the PHP extensions we need
+RUN set -ex; \
+	\
+	apt-get update; \
+	apt-get install -y \
+		libjpeg-dev \
+		libpng-dev \
+	; \
+	rm -rf /var/lib/apt/lists/*; \
+	\
+	docker-php-ext-configure gd --with-png-dir=/usr --with-jpeg-dir=/usr; \
+	docker-php-ext-install gd mysqli opcache
+# TODO consider removing the *-dev deps and only keeping the necessary lib* packages
 
-# Build-time metadata as defined at http://label-schema.org
-ARG BUILD_DATE
-ARG VCS_REF
-ARG GRAYLOG_VERSION
+# set recommended PHP.ini settings
+# see https://secure.php.net/manual/en/opcache.installation.php
+RUN { \
+		echo 'opcache.memory_consumption=128'; \
+		echo 'opcache.interned_strings_buffer=8'; \
+		echo 'opcache.max_accelerated_files=4000'; \
+		echo 'opcache.revalidate_freq=2'; \
+		echo 'opcache.fast_shutdown=1'; \
+		echo 'opcache.enable_cli=1'; \
+	} > /usr/local/etc/php/conf.d/opcache-recommended.ini
 
-LABEL org.label-schema.build-date=$BUILD_DATE \
-      org.label-schema.name="Graylog Docker Image" \
-      org.label-schema.description="Official Graylog Docker image" \
-      org.label-schema.url="https://www.graylog.org/" \
-      org.label-schema.vcs-ref=$VCS_REF \
-      org.label-schema.vcs-url="https://github.com/Graylog2/graylog-docker" \
-      org.label-schema.vendor="Graylog, Inc." \
-      org.label-schema.version=$GRAYLOG_VERSION \
-      org.label-schema.schema-version="1.0" \
-      com.microscaling.docker.dockerfile="/Dockerfile" \
-      com.microscaling.license="Apache 2.0"
+RUN a2enmod rewrite expires
 
+VOLUME /var/www/html
 
-ENV GOSU_VERSION 1.10
-RUN set -ex \
-  && wget -nv -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$(dpkg --print-architecture)" \
-  && wget -nv -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$(dpkg --print-architecture).asc" \
-  && export GNUPGHOME="$(mktemp -d)" \
-  && gpg --keyserver keyserver.ubuntu.com --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4 \
-  && gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu \
-  && rm -rf "$GNUPGHOME" /usr/local/bin/gosu.asc \
-  && chmod +x /usr/local/bin/gosu \
-  && gosu nobody true
+ENV WORDPRESS_VERSION 4.8.3
+ENV WORDPRESS_SHA1 8efc0b9f6146e143ed419b5419d7bb8400a696fc
 
-ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/jre
-RUN set -ex \
-  && addgroup --gid 1100 graylog \
-  && adduser --disabled-password --disabled-login --gecos '' --uid 1100 --gid 1100 graylog \
-  && mkdir /usr/share/graylog \
-  && wget -nv -O /usr/share/graylog.tgz "https://packages.graylog2.org/releases/graylog/graylog-${GRAYLOG_VERSION}.tgz" \
-  && tar xfz /usr/share/graylog.tgz --strip-components=1 -C /usr/share/graylog \
-  && chown -R graylog:graylog /usr/share/graylog \
-  && rm -f /usr/share/graylog.tgz \
-  && apt-get update && apt-get -y install libcap2-bin \
-  && setcap 'cap_net_bind_service=+ep' $JAVA_HOME/bin/java
+RUN set -ex; \
+	curl -o wordpress.tar.gz -fSL "https://wordpress.org/wordpress-${WORDPRESS_VERSION}.tar.gz"; \
+	echo "$WORDPRESS_SHA1 *wordpress.tar.gz" | sha1sum -c -; \
+# upstream tarballs include ./wordpress/ so this gives us /usr/src/wordpress
+	tar -xzf wordpress.tar.gz -C /usr/src/; \
+	rm wordpress.tar.gz; \
+	chown -R www-data:www-data /usr/src/wordpress
 
-ENV GRAYLOG_SERVER_JAVA_OPTS "-XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -XX:NewRatio=1 -XX:MaxMetaspaceSize=256m -server -XX:+ResizeTLAB -XX:+UseConcMarkSweepGC -XX:+CMSConcurrentMTEnabled -XX:+CMSClassUnloadingEnabled -XX:+UseParNewGC -XX:-OmitStackTraceInFastThrow"
-ENV PATH /usr/share/graylog/bin:$PATH
-WORKDIR /usr/share/graylog
+COPY docker-entrypoint.sh /usr/local/bin/
 
-RUN set -ex \
-  && for path in \
-    ./data/journal \
-    ./data/log \
-    ./data/config \
-  ; do \
-    mkdir -p "$path"; \
-  done
-
-COPY config ./data/config
-
-VOLUME /usr/share/graylog/data
-
-COPY docker-entrypoint.sh /
-
-EXPOSE 9000
-ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["graylog"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["apache2-foreground"]
